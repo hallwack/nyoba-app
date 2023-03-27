@@ -3,11 +3,13 @@ import {
   getServerSession,
   type NextAuthOptions,
   type DefaultSession,
+  RequestInternal,
+  User,
 } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { env } from "@/env.mjs";
 import { prisma } from "@/server/db";
+import argon2 from "argon2";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -19,15 +21,8 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
-      // ...other properties
-      // role: UserRole;
     } & DefaultSession["user"];
   }
-
-  // interface User {
-  //   // ...other properties
-  //   // role: UserRole;
-  // }
 }
 
 /**
@@ -40,16 +35,50 @@ export const authOptions: NextAuthOptions = {
     session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        // session.user.role = user.role; <-- put other properties on the session here
+        session.user.name = user.name;
       }
       return session;
     },
   },
   adapter: PrismaAdapter(prisma),
   providers: [
-    DiscordProvider({
-      clientId: env.DISCORD_CLIENT_ID,
-      clientSecret: env.DISCORD_CLIENT_SECRET,
+    CredentialsProvider({
+      credentials: {
+        email: { label: "Email", type: "email", placeholder: "user@mail.com" },
+        password: {
+          label: "Password",
+          type: "password",
+          placeholder: "password",
+        },
+      },
+      async authorize(
+        credentials: Record<"email" | "password", string> | undefined,
+        req: Pick<RequestInternal, "query" | "body" | "headers" | "method">
+      ): Promise<User | null> {
+        try {
+          const { email, password } = credentials as {
+            email: string;
+            password: string;
+          };
+          const user = await prisma.user.findFirst({
+            where: { email },
+          });
+          console.log(email, password);
+          if (credentials?.password) {
+            try {
+              if (user && (await argon2.verify(user.password, password)))
+                return user;
+            } catch (error) {
+              return null;
+            }
+            return null;
+          } else {
+            return user;
+          }
+        } catch (error) {
+          return null;
+        }
+      },
     }),
     /**
      * ...add more providers here.
@@ -61,6 +90,10 @@ export const authOptions: NextAuthOptions = {
      * @see https://next-auth.js.org/providers/github
      */
   ],
+  pages: {
+    signIn: "/auth/login",
+    newUser: "/auth/register",
+  },
 };
 
 /**
