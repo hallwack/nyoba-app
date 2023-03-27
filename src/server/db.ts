@@ -19,28 +19,28 @@ if (env.NODE_ENV !== "production") {
     return next(params);
   });
 
-  prisma.$use(async (params, next) => {
-    if (params.model === "User" && params.action === "findFirst") {
-      const password = params.args.where?.password;
-      if (password) delete params.args.where.password;
+  // prisma.$use(async (params, next) => {
+  //   if (params.model === "User" && params.action === "findFirst") {
+  //     const password = params.args.where?.password;
+  //     if (password) delete params.args.where.password;
 
-      const user = await next(params);
+  //     const user = await next(params);
 
-      if (password) {
-        try {
-          if (user && (await argon2.verify(user.password, password)))
-            return user;
-        } catch (error) {
-          return null;
-        }
-        return null;
-      } else {
-        return user;
-      }
-    }
+  //     if (password) {
+  //       try {
+  //         if (user && (await argon2.verify(user.password, password)))
+  //           return user;
+  //       } catch (error) {
+  //         return null;
+  //       }
+  //       return null;
+  //     } else {
+  //       return user;
+  //     }
+  //   }
 
-    return next(params);
-  });
+  //   return next(params);
+  // });
 
   globalForPrisma.prisma = prisma;
 }
